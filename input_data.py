@@ -4,7 +4,13 @@ Created on Wed Aug 24 11:47:51 2016
 
 @author: rob
 
-Functions for downloading and reading MNIST data."""
+Functions for downloading and reading MNIST data.
+
+This scrips was orginially made by
+rinuboney
+https://github.com/rinuboney/ladder
+
+"""
 from __future__ import print_function
 import gzip
 import os
