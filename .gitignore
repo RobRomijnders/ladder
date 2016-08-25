@@ -1,0 +1,5 @@
+/checkpoints
+/MNIST_data
+*.pyc
+train_log
+
