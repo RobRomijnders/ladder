@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Ladder by RobRomijnders</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <meta name="viewport" content="width=device-width">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Ladder</h1>
+        <p>LADDER network after Harri Valpola</p>
+
+        <p class="view"><a href="https://github.com/RobRomijnders/ladder">View the Project on GitHub <small>RobRomijnders/ladder</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/RobRomijnders/ladder/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/RobRomijnders/ladder/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/RobRomijnders/ladder">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h2>
+<a id="ladder-network" class="anchor" href="#ladder-network" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ladder network</h2>
+
+<p>This post implements the Ladder network, as proposed in <a href="https://arxiv.org/pdf/1411.7783.pdf">this</a> and <a href="http://arxiv.org/pdf/1507.02672v2.pdf">this</a> paper for Tensorflow. The ladder network allows for semi-supervised learning. In this setting, the network learns from both labelled and unlabelled data. For example, the ladder network achieves only 0.0106 test error on MNIST with 100 labelled examples (ten labelled examples per class).</p>
+
+<h2>
+<a id="outline" class="anchor" href="#outline" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Outline</h2>
+
+<p><em>This section aims to outline the network. The <a href="http://arxiv.org/pdf/1507.02672v2.pdf">paper</a> describes further details.</em>
+A ladder network combines supervised and unsupervised learning. Supervised learning takes form as feedforward neural nets, convolutional nets and recurrent nets. Unsupervised learning takes form as auto-encoding the distributed representations.
+Supervised and unsupervised learning contrast in their preservation of detail. Supervised learning serves one task at hand and discards the details in the input that do not contribute. Unsupervised learning preserves a range of details and concepts in order to reconstruct it at the decoder. Every stage of the ladder combines the two: One objective function monitors the reconstruction of the distributed representation at the decoder side. Another objective (at the topmost level) monitors the classification performance of the encoder network. The reconstruction-objectives require no labels. Yet they involve the entire network. Therefore, unlabelled data can train the network too.</p>
+
+<p>Another way to understand ladder networks is via this analogy:
+As humans we perform semi-supervised learning too. Say we'd train your friend to classify oak trees from maple trees. We need maybe five or six examples so he can classify them with reasonable accuracy. Yet we'd need thousands of examples for a computer to achieve similar accuracy. Why is this? Well, he has seen many trees throughout his live. He understands the general structure of a tree. We only need few examples to add the fine details that discriminate a maple from an oak tree.
+The interplay of encoder and decoder follow this analogy too. The unsupervised/auto-encoding part of the ladder network teaches the network a gross understanding of what the data encompasses. It needs to do this to achieve reconstruction. The supervised/encoder part of the ladder network teaches the network the fine-grained details that discriminate one class from the other. 
+In other words <em>the unsupervised objective preserves a range of features and with the few labelled samples the network decides which features support classification</em>
+<a href="https://www.youtube.com/watch?v=ZlyqNiPFu2s">Do you like more intuitive explanations, images and videos? I'd recommend Harri Valopola's talk at this symposium.</a></p>
+
+<h2>
+<a id="code" class="anchor" href="#code" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Code</h2>
+
+<p>A quick Google-search brings us two implementations in Tensorflow</p>
+
+<ul>
+<li>By <a href="https://github.com/rinuboney/ladder">rinuboney</a>
+</li>
+<li>By <a href="https://github.com/tarvaina/tensorflow-ladder">tarvaina</a>
+I decided to continue on rinuboney's work. It works top-down in one file and is an easy read.
+<a href="https://www.youtube.com/watch?v=ZlyqNiPFu2s">Harri Valpola</a> proposes the ladder network in his talk as a general framework. It applies to any neural network that can encode and decode representations. The repo by rinuboney implements the basic MLP version. This post continues with his code and implements it for convolutional neural networks. 
+<em>(I consider to implement a recurrent ladder network too. Email me at <a href="mailto:romijndersrob@gmail.com">romijndersrob@gmail.com</a> if you'd be interested in that)</em>
+</li>
+</ul>
+
+<h2>
+<a id="results" class="anchor" href="#results" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Results</h2>
+
+<p>The ladder network applies to many neural networks where you'd like semi-supervised learning. The results and visualizations will depend on your application. For the moment, I made it work on MNIST
+<img src="https://github.com/RobRomijnders/ladder/blob/master/im/figure_18.png?raw=true" alt="18">
+<img src="https://github.com/RobRomijnders/ladder/blob/master/im/figure_19.png?raw=true" alt="19">
+<img src="https://github.com/RobRomijnders/ladder/blob/master/im/figure_21.png?raw=true" alt="21"></p>
+
+<p>As always, I am curious to any comments and questions. Reach me at <a href="mailto:romijndersrob@gmail.com">romijndersrob@gmail.com</a></p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/RobRomijnders">RobRomijnders</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
