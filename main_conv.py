@@ -6,6 +6,9 @@ Created on Wed Aug 24 11:47:31 2016
 
 Code base from
 https://github.com/rinuboney/ladder
+
+- Why start backpropping from the softmaxed-layer?
+
 """
 
 import tensorflow as tf
@@ -23,7 +26,6 @@ channel_sizes = [1,12,8,6,4,3,10]  #Last layer will by fully conv
 logsave = False   # Do you want log files and checkpoint savers?
 vis = True        #Visualize the Original - Noised - Recovered for the unsupervised samples
 
-L = len(layer_sizes) - 1  # number of layers
 C = len(channel_sizes) - 1 # number of channel sizes
 
 map_sizes = [28]
@@ -33,6 +35,7 @@ for c in range(1,C):
 num_examples = 60000
 num_epochs = 150
 num_labeled = 100
+num_classes  =10
 
 starter_learning_rate = 0.02
 
@@ -41,7 +44,7 @@ decay_after = 15  # epoch after which to begin learning rate decay
 batch_size = 100
 num_iter = (num_examples/batch_size) * num_epochs  # number of loop iterations
 
-inputs = tf.placeholder(tf.float32, shape=(None, layer_sizes[0]))
+inputs = tf.placeholder(tf.float32, shape=(None, 784))
 images = tf.reshape(inputs,[-1,28,28,1])
 outputs = tf.placeholder(tf.float32)
 
@@ -53,28 +56,34 @@ def bi(inits, size, name):
 def wi(shape, name):
   return tf.Variable(tf.random_normal(shape, name=name)) / math.sqrt(shape[0])
 
-shapes = zip(layer_sizes[:-1], layer_sizes[1:])  # shapes of linear layers
 
 weights = {'W': [0]*C,
            'V': [0]*C,
            # batch normalization parameter to shift the normalized value
-           'beta': [bi(0.0, layer_sizes[l+1], "beta") for l in range(L)],
+           'beta': [bi(0.0, channel_sizes[l+1], "beta") for l in range(C)],
            # batch normalization parameter to scale the normalized value
-           'gamma': [bi(1.0, layer_sizes[l+1], "beta") for l in range(L)]}
+           'gamma': [bi(1.0, channel_sizes[l+1], "beta") for l in range(C)]}
 
 initi = tf.uniform_unit_scaling_initializer(factor=1.43)
 for c in range(C):
   if c == 5: #Make the kernel as big as the final map sizes. Similar to Fully Convolutional Layer
     width = map_sizes[-1]
-    weights['W'][c] = tf.get_variable(name='W'+str(c), shape=[width,width,channel_sizes[c],channel_sizes[c+1]], initializer = initi)
+    shape = [width,width,channel_sizes[c],channel_sizes[c+1]]
+    weights['W'][c] = tf.get_variable(name='W'+str(c), shape=shape, initializer = initi)
   else:
-    weights['W'][c] = tf.get_variable(name='W'+str(c), shape=[3,3,channel_sizes[c],channel_sizes[c+1]], initializer = initi)
+    shape = [3,3,channel_sizes[c],channel_sizes[c+1]]
+    weights['W'][c] = tf.get_variable(name='W'+str(c), shape=shape, initializer = initi)
+  print('W%s has shape '%c+str(shape))
 for c in range(C-1,-1,-1):
   if c == 5:
     width = map_sizes[-1]
-    weights['V'][c] = tf.get_variable(name='V'+str(c), shape=[width,width,channel_sizes[c+1],channel_sizes[c]], initializer = initi)
+    shape = [width,width,channel_sizes[c],channel_sizes[c+1]]
+    weights['V'][c] = tf.get_variable(name='V'+str(c), shape=shape, initializer = initi)
   else:
-    weights['V'][c] = tf.get_variable(name='V'+str(c), shape=[3,3,channel_sizes[c+1],channel_sizes[c]], initializer = initi)
+    shape = [3,3,channel_sizes[c],channel_sizes[c+1]]
+    weights['V'][c] = tf.get_variable(name='V'+str(c), shape=shape, initializer = initi)
+  print('V%s has shape '%c+str(shape))
+
 
 
 noise_std = 0.3  # scaling factor for noise used in corrupted encoder
@@ -87,6 +96,9 @@ join = lambda l, u: tf.concat(0, [l, u])
 labeled = lambda x: tf.slice(x, [0, 0,0,0], [batch_size, -1,-1,-1]) if x is not None else x
 unlabeled = lambda x: tf.slice(x, [batch_size, 0,0,0], [-1, -1,-1,-1]) if x is not None else x
 split_lu = lambda x: (labeled(x), unlabeled(x))
+#The old functions that work with 2D Tensors
+labeled2 = lambda x: tf.slice(x, [0, 0], [batch_size, -1]) if x is not None else x
+unlabeled2 = lambda x: tf.slice(x, [batch_size, 0], [-1, -1]) if x is not None else x
 
 training = tf.placeholder(tf.bool)
 
@@ -123,14 +135,14 @@ def encoder(images, noise_std):
   d['labeled'] = {'z': {}, 'm': {}, 'v': {}, 'h': {}}
   d['unlabeled'] = {'z': {}, 'm': {}, 'v': {}, 'h': {}}
   d['labeled']['z'][0], d['unlabeled']['z'][0] = split_lu(h)
-  for l in range(1, L+1):
-    print "Layer ", l, ": ", layer_sizes[l-1], " -> ", layer_sizes[l]
+  for l in range(1, C+1):
+    print "Layer ", l, ": ", channel_sizes[l-1], " -> ", channel_sizes[l]
     d['labeled']['h'][l-1], d['unlabeled']['h'][l-1] = split_lu(h)
 #    z_pre = tf.matmul(h, weights['W'][l-1])  # pre-activation
-    z_pre = tf.nn.conv2d(h, weights['W'][l-1], strides=[1, 1, 1, 1], padding='SAME')
+    z_pre = tf.nn.conv2d(h, weights['W'][l-1], strides=[1, 1, 1, 1], padding='VALID')
     z_pre_l, z_pre_u = split_lu(z_pre)  # split labeled and unlabeled examples
 
-    m, v = tf.nn.moments(z_pre_u, axes=[0,1,2])
+    m, v = tf.nn.moments(z_pre_u, axes=[0,1,2]) #in size [,channel_sizes[l]]
 
     # if training:
     def training_batch_norm():
@@ -162,10 +174,10 @@ def encoder(images, noise_std):
 
     # perform batch normalization according to value of boolean "training" placeholder:
     z = control_flow_ops.cond(training, training_batch_norm, eval_batch_norm)
-################
-    if l == L:
+    if l == C:
       # use softmax activation in output layer
-      h = tf.nn.softmax(weights['gamma'][l-1] * (z + weights["beta"][l-1]))
+      h = tf.nn.softmax(weights['gamma'][l-1] * (tf.squeeze(z,squeeze_dims=[1,2]) + weights["beta"][l-1]))
+      h = tf.expand_dims(tf.expand_dims(h,dim=1),dim=2)
     else:
       # use ReLU activation in hidden layers
       h = tf.nn.relu(z + weights["beta"][l-1])
@@ -210,31 +222,35 @@ def g_gauss(z_c, u, size):
 # Decoder
 z_est = {}
 d_cost = []  # to store the denoising cost of all layers
-for l in range(L, -1, -1):
-  print "Layer ", l, ": ", layer_sizes[l+1] if l+1 < len(layer_sizes) else None, " -> ", layer_sizes[l], ", denoising cost: ", denoising_cost[l]
+for l in range(C, -1, -1):
+  print "Layer ", l, ": ", channel_sizes[l+1] if l+1 < len(channel_sizes) else None, " -> ", channel_sizes[l], ", denoising cost: ", denoising_cost[l]
   z, z_c = clean['unlabeled']['z'][l], corrupted['unlabeled']['z'][l]
   m, v = clean['unlabeled']['m'].get(l, 0), clean['unlabeled']['v'].get(l, 1-1e-10)
   # m are batch-norm means, v are batch-norm stddevs
-  if l == L:
+  if l == C:
     u = unlabeled(y_c)
   else:
-    u = tf.matmul(z_est[l+1], weights['V'][l])
+    u = tf.nn.conv2d_transpose(z_est[l+1], weights['V'][l], tf.pack([tf.shape(z_est[l+1])[0], map_sizes[l], map_sizes[l], channel_sizes[l]]),strides=[1, 1, 1, 1], padding='VALID',name = 'CT'+str(l))
   u = batch_normalization(u)
-  z_est[l] = g_gauss(z_c, u, layer_sizes[l])
+  z_est[l] = g_gauss(z_c, u, channel_sizes[l])
   z_est_bn = (z_est[l] - m) / v
   # append the cost of this layer to d_cost
-  d_cost.append((tf.reduce_mean(tf.reduce_sum(tf.square(z_est_bn - z), 1)) / layer_sizes[l]) * denoising_cost[l])
+  d_cost.append((tf.reduce_mean(tf.reduce_sum(tf.square(z_est_bn - z), 1)) / channel_sizes[l]) * denoising_cost[l])
 
 # calculate total unsupervised cost by adding the denoising cost of all layers
 u_cost = tf.add_n(d_cost)
 
 y_N = labeled(y_c)
+
+#Convert y* back to 2D Tensor
+y_N = tf.squeeze(y_N, squeeze_dims=[1,2])
+y = tf.squeeze(y, squeeze_dims=[1,2])
+
 s_cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y_N), 1))  # supervised cost
 loss = s_cost + u_cost  # total cost
 
-pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y), 1))  # cost used for prediction
-size1 = tf.shape(y)
-correct_prediction = tf.equal(tf.argmax(labeled(y), 1), tf.argmax(outputs, 1))  # no of correct predictions
+#pred_cost = -tf.reduce_mean(tf.reduce_sum(outputs*tf.log(y), 1))  # cost used for prediction
+correct_prediction = tf.equal(tf.argmax(labeled2(y), 1), tf.argmax(outputs, 1))  # no of correct predictions
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float")) * tf.constant(100.0)
 
 learning_rate = tf.Variable(starter_learning_rate, trainable=False)
@@ -273,8 +289,9 @@ print "=== Training ==="
 #print "Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: mnist.test.images, outputs: mnist.test.labels, training: False}), "%"
 
 for i in range(i_iter, num_iter):
+  plt.close("all")
   images, labels = mnist.train.next_batch(batch_size)
-  debug,_ = sess.run([size1,train_step], feed_dict={inputs: images, outputs: labels, training: True})
+  _ = sess.run([train_step], feed_dict={inputs: images, outputs: labels, training: True})
 #  print(debug)
   if (i > 1) and i%10 == 0:  #((i+1) % (num_iter/num_epochs) == 0)
     epoch_n = i/(num_examples/batch_size)
@@ -300,8 +317,6 @@ for i in range(i_iter, num_iter):
         axarr[r, 0].imshow(np.reshape(images_val[batch_size+ind[r]],(28,28)), cmap=plt.get_cmap('gray'),vmin = 0.0, vmax=1.0)
         axarr[r, 1].imshow(np.reshape(result[3][ind[r]],(28,28)), cmap=plt.get_cmap('gray'),vmin = 0.0, vmax=1.0)
         axarr[r, 2].imshow(np.reshape(result[4][ind[r]],(28,28)), cmap=plt.get_cmap('gray'),vmin = 0.0, vmax=1.0)
-
-        # Fine-tune figure; hide x ticks for top plots and y ticks for right plots
         plt.setp([a.get_xticklabels() for a in axarr[r, :]], visible=False)
         plt.setp([a.get_yticklabels() for a in axarr[r, :]], visible=False)
       f.subplots_adjust(wspace=0.0, hspace = 0.0)
