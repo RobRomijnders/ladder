@@ -20,8 +20,9 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
-layer_sizes = [784, 1000, 500, 250, 250, 250, 10]
-channel_sizes = [1,12,8,6,4,3,10]  #Last layer will by fully conv
+channel_sizes = [1,12,10,10]  #Last layer will by fully conv
+denoising_cost =10* np.array([10.0, 10.0,0.1, 0.10])
+
 
 logsave = False   # Do you want log files and checkpoint savers?
 vis = True        #Visualize the Original - Noised - Recovered for the unsupervised samples
@@ -66,7 +67,7 @@ weights = {'W': [0]*C,
 
 initi = tf.uniform_unit_scaling_initializer(factor=1.43)
 for c in range(C):
-  if c == 5: #Make the kernel as big as the final map sizes. Similar to Fully Convolutional Layer
+  if c == C-1: #Make the kernel as big as the final map sizes. Similar to Fully Convolutional Layer
     width = map_sizes[-1]
     shape = [width,width,channel_sizes[c],channel_sizes[c+1]]
     weights['W'][c] = tf.get_variable(name='W'+str(c), shape=shape, initializer = initi)
@@ -75,7 +76,7 @@ for c in range(C):
     weights['W'][c] = tf.get_variable(name='W'+str(c), shape=shape, initializer = initi)
   print('W%s has shape '%c+str(shape))
 for c in range(C-1,-1,-1):
-  if c == 5:
+  if c == C-1:
     width = map_sizes[-1]
     shape = [width,width,channel_sizes[c],channel_sizes[c+1]]
     weights['V'][c] = tf.get_variable(name='V'+str(c), shape=shape, initializer = initi)
@@ -89,7 +90,6 @@ for c in range(C-1,-1,-1):
 noise_std = 0.3  # scaling factor for noise used in corrupted encoder
 
 # hyperparameters that denote the importance of each layer
-denoising_cost = [1000.0, 10.0, 0.10, 0.10, 0.10, 0.10, 0.10]
 
 #Note, these four functions work now for 4D Tensors
 join = lambda l, u: tf.concat(0, [l, u])
@@ -287,11 +287,16 @@ else:
 
 print "=== Training ==="
 #print "Initial Accuracy: ", sess.run(accuracy, feed_dict={inputs: mnist.test.images, outputs: mnist.test.labels, training: False}), "%"
-
+acc_ma = 0.0
+s_cost_ma = 0.0
+u_cost_ma = 0.0
 for i in range(i_iter, num_iter):
-  plt.close("all")
   images, labels = mnist.train.next_batch(batch_size)
-  _ = sess.run([train_step], feed_dict={inputs: images, outputs: labels, training: True})
+  result = sess.run([train_step,accuracy,s_cost,u_cost], feed_dict={inputs: images, outputs: labels, training: True})
+  acc_ma = 0.8*acc_ma+0.2*result[1]
+  s_cost_ma = 0.8*s_cost_ma+0.2*result[2]
+  u_cost_ma = 0.8*u_cost_ma+0.2*result[3]
+
 #  print(debug)
   if (i > 1) and i%10 == 0:  #((i+1) % (num_iter/num_epochs) == 0)
     epoch_n = i/(num_examples/batch_size)
@@ -306,10 +311,10 @@ for i in range(i_iter, num_iter):
     if vis: fetch += [corrupted['unlabeled']['z'][0],z_est[0]]
     images_val, labels_val = mnist.validation.next_batch(batch_size)
     result = sess.run(fetch, feed_dict={inputs: images_val, outputs:labels_val, training: False})
-    print("At %5.0f of %5.0f acc %.3f cost super %5.3f unsuper %5.3f"%(i,num_iter,result[0],result[1],result[2]))
+    print("At %5.0f of %5.0f acc %5.1f(%5.1f) cost super %6.2f(%6.2f) unsuper %6.2f(%6.2f)"%(i,num_iter,result[0],acc_ma,result[1],s_cost_ma,result[2],u_cost_ma))
 
     #Visualize
-    if vis:
+    if vis and i%100 == 0:
       Nplot = 3
       ind = np.random.choice(num_labeled,Nplot)
       f, axarr = plt.subplots(Nplot, 3)
