@@ -12,7 +12,7 @@ https://github.com/rinuboney/ladder
 """
 
 import tensorflow as tf
-from tensorflow.python import control_flow_ops
+from tensorflow.python.ops import control_flow_ops
 import input_data
 import math
 import os
@@ -25,7 +25,7 @@ denoising_cost =10* np.array([10.0, 10.0,0.1, 0.10])
 
 
 logsave = False   # Do you want log files and checkpoint savers?
-vis = True        #Visualize the Original - Noised - Recovered for the unsupervised samples
+vis = False # True        #Visualize the Original - Noised - Recovered for the unsupervised samples
 
 C = len(channel_sizes) - 1 # number of channel sizes
 
@@ -92,7 +92,7 @@ noise_std = 0.3  # scaling factor for noise used in corrupted encoder
 # hyperparameters that denote the importance of each layer
 
 #Note, these four functions work now for 4D Tensors
-join = lambda l, u: tf.concat(0, [l, u])
+join = lambda l, u: tf.concat([l, u], 0)
 labeled = lambda x: tf.slice(x, [0, 0,0,0], [batch_size, -1,-1,-1]) if x is not None else x
 unlabeled = lambda x: tf.slice(x, [batch_size, 0,0,0], [-1, -1,-1,-1]) if x is not None else x
 split_lu = lambda x: (labeled(x), unlabeled(x))
@@ -230,7 +230,7 @@ for l in range(C, -1, -1):
   if l == C:
     u = unlabeled(y_c)
   else:
-    u = tf.nn.conv2d_transpose(z_est[l+1], weights['V'][l], tf.pack([tf.shape(z_est[l+1])[0], map_sizes[l], map_sizes[l], channel_sizes[l]]),strides=[1, 1, 1, 1], padding='VALID',name = 'CT'+str(l))
+    u = tf.nn.conv2d_transpose(z_est[l+1], weights['V'][l], tf.stack([tf.shape(z_est[l+1])[0], map_sizes[l], map_sizes[l], channel_sizes[l]]),strides=[1, 1, 1, 1], padding='VALID',name = 'CT'+str(l))
   u = batch_normalization(u)
   z_est[l] = g_gauss(z_c, u, channel_sizes[l])
   z_est_bn = (z_est[l] - m) / v
@@ -282,7 +282,7 @@ else:
   # no checkpoint exists. create checkpoints directory if it does not exist.
   if not os.path.exists('checkpoints'):
       os.makedirs('checkpoints')
-  init = tf.initialize_all_variables()
+  init = tf.global_variables_initializer()
   sess.run(init)
 
 print "=== Training ==="
@@ -336,6 +336,12 @@ for i in range(i_iter, num_iter):
         log_i = [epoch_n] + sess.run([accuracy], feed_dict={inputs: mnist.test.images, outputs: mnist.test.labels, training: False})
         train_log_w.writerow(log_i)
 
-print "Final Accuracy: ", sess.run(accuracy, feed_dict={inputs: mnist.test.images, outputs: mnist.test.labels, training: False}), "%"
+acc_sum = 0
+acc_count = 0
+for i in range(mnist.validation.num_examples/batch_size):
+    	images_val, labels_val = mnist.validation.next_batch(batch_size)
+	acc_sum += sess.run(accuracy, feed_dict={inputs: images_val, outputs: labels_val, training: False})
+	acc_count += 1
+print("Final Accuray: %f" % (acc_sum/acc_count))
 
 sess.close()
