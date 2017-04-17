@@ -25,7 +25,7 @@ denoising_cost =10* np.array([10.0, 10.0,0.1, 0.10])
 
 
 logsave = False   # Do you want log files and checkpoint savers?
-vis = False # True        #Visualize the Original - Noised - Recovered for the unsupervised samples
+vis = True        #Visualize the Original - Noised - Recovered for the unsupervised samples
 
 C = len(channel_sizes) - 1 # number of channel sizes
 
